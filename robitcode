@@ -1,0 +1,187 @@
+package frc.robot;
+
+import edu.wpi.first.cameraserver.CameraServer;
+import edu.wpi.first.wpilibj.DoubleSolenoid;
+import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.Solenoid;
+import edu.wpi.first.wpilibj.SpeedControllerGroup;
+import edu.wpi.first.wpilibj.TimedRobot;
+import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.Victor;
+import edu.wpi.first.wpilibj.CounterBase.EncodingType;
+import edu.wpi.first.wpilibj.buttons.JoystickButton;
+
+/**
+ * The VM is configured to automatically run this class, and to call the functions corresponding to
+ * each mode, as described in the TimedRobot documentation. If you change the name of this class or
+ * the package after creating this project, you must also update the build.gradle file in the
+ * project.
+ */
+public class Robot extends TimedRobot {
+
+  public Victor motorbottoml = new Victor(0);
+  public Victor motorfrontl = new Victor(1);
+  public Victor motorbottomr = new Victor(2);
+  public Victor motorfrontr = new Victor(3);
+
+  public Joystick joyleft = new Joystick(0);
+  public Joystick joyright = new Joystick(1);
+
+  public Joystick joysticksingle = new Joystick(0);
+
+
+  public JoystickButton joystickbutton1 = new JoystickButton(joyleft, 1);
+
+  SpeedControllerGroup motorGroupLeft = new SpeedControllerGroup(motorfrontl, motorbottoml);
+  SpeedControllerGroup motorGroupRight = new SpeedControllerGroup(motorfrontr, motorbottomr);
+
+ 
+  public Encoder encoder = new Encoder(0, 1, true, EncodingType.k2X);
+  public final double kDriveTick2Feet = 1.0/128*6*Math.PI/12;
+
+  double setpoint = 0;
+  double errorSum = 0;
+  double lastTimestamp = 0;
+  double lastError = 0;
+
+  final double kp = 0.5;
+  final double ki = 0.05;
+  final double kd = 0.1;
+  DoubleSolenoid solenoid1 = new DoubleSolenoid(0,1);
+  //Solenoid sole1 = new Solenoid(PneumaticsModuleType.CTREPCM, 1);
+  Solenoid sole2 = new Solenoid(1);
+
+  
+
+  @Override
+  public void robotInit() {
+    CameraServer.getInstance().startAutomaticCapture();
+
+    DoubleSolenoid.clearAllPCMStickyFaults(0);
+    //sole1.set(false);
+    sole2.set(false);
+  }
+
+  /**
+   * This function is called every robot packet, no matter the mode. Use this for items like
+   * diagnostics that you want ran during disabled, autonomous, teleoperated and test.
+   *
+   * <p>This runs after the mode specific periodic functions, but before LiveWindow and
+   * SmartDashboard integrated updating.
+   */
+  @Override
+  public void robotPeriodic() {}
+
+  /**
+   * This autonomous (along with the chooser code above) shows how to select between different
+   * autonomous modes using the dashboard. The sendable chooser code works with the Java
+   * SmartDashboard. If you prefer the LabVIEW Dashboard, remove all of the chooser code and
+   * uncomment the getString line to get the auto name from the text box below the Gyro
+   *
+   * <p>You can add additional auto modes by adding additional comparisons to the switch structure
+   * below with additional strings. If using the SendableChooser make sure to add them to the
+   * chooser code above as well.
+   */
+
+
+
+  @Override
+  public void autonomousInit() {
+     encoder.reset();
+     errorSum = 0;
+     lastTimestamp = Timer.getFPGATimestamp();
+     lastError = 0;
+  }
+
+  
+
+  public void tankDrive() {
+    motorbottoml.set(joyleft.getY());
+    motorfrontl.set(joyleft.getY());
+    motorbottomr.set(-(joyright.getY()));
+    motorfrontr.set(-(joyright.getY()));
+
+    return;
+  }
+
+  public void arcadeDrive() {    
+    motorGroupLeft.set(-(joysticksingle.getY() - joysticksingle.getX() * 0.3));
+    motorGroupRight.set((joysticksingle.getY() - joysticksingle.getX() * 0.3));
+    
+  } 
+
+  /** This function is called periodically during autonomous. */
+
+  @Override
+  public void autonomousPeriodic() {
+
+ 
+    // get joystick command
+    if(joyleft.getRawButton(1)) {
+      setpoint = 10;
+    } else if(joyleft.getRawButton(2)) {
+      setpoint = 0;
+    }
+
+    //get sensor position
+    double sensorPosition = encoder.get() * kDriveTick2Feet;
+
+    //calculation
+    double error = setpoint - sensorPosition;
+    double dt = Timer.getFPGATimestamp() - lastTimestamp;
+
+    errorSum += error *dt;
+
+    double errorRate = (error - lastError) / dt;
+
+    double outputSpeed = kp *error + ki * errorSum + kd * errorRate;
+
+    //output to motors
+    motorbottoml.set(outputSpeed);
+    motorfrontl.set(outputSpeed);
+    motorbottomr.set(-outputSpeed);
+    motorfrontr.set(-outputSpeed);
+
+    //update last variables
+    lastTimestamp = Timer.getFPGATimestamp();
+    lastError = error;
+
+  }
+
+  /** This function is called once when teleop is enabled. */
+  @Override
+  public void teleopInit() {
+    solenoid1.set(DoubleSolenoid.Value.kOff);
+    //sole1.set(false);
+    sole2.set(false);
+  }
+
+  /** This function is called periodically during operator control. */
+  @Override
+  public void teleopPeriodic() {
+    arcadeDrive();
+
+    if(joystickbutton1.get()){
+      solenoid1.set(DoubleSolenoid.Value.kForward);
+      sole2.set(true);
+      
+    }
+  }
+
+  /** This function is called once when the robot is disabled. */
+  @Override
+  public void disabledInit() {}
+
+  /** This function is called periodically when disabled. */
+  @Override 
+  public void disabledPeriodic() {}
+
+  /** This function is called once when test mode is enabled. */
+  @Override
+  public void testInit() {}
+
+  /** This function is called periodically during test mode. */
+  @Override
+  public void testPeriodic() {}
+}
